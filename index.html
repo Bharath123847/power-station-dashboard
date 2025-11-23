@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hybrid Power Station - Live Dashboard</title>
+    <title>Hybrid Power Station - Live Monitor</title>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -19,7 +19,7 @@
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
         }
 
@@ -29,24 +29,25 @@
             margin: 15px; 
             border-radius: 15px; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-            width: 280px;
+            width: 260px;
             transition: transform 0.2s;
         }
         .card:hover { transform: translateY(-5px); }
 
         .label { 
             color: #888; 
-            font-size: 0.9em; 
+            font-size: 0.85em; 
             text-transform: uppercase; 
             letter-spacing: 1px; 
             margin-bottom: 10px;
         }
         .value { 
-            font-size: 2.5em; 
+            font-size: 2.2em; 
             font-weight: bold; 
             color: #333; 
         }
         .unit { font-size: 0.4em; color: #999; vertical-align: super;}
+        .sub-value { font-size: 0.9em; color: #555; margin-top: 5px; }
 
         /* Specific Colors */
         .status-on { color: #28a745; }
@@ -59,113 +60,117 @@
 <body>
 
     <h1>⚡ Hybrid Power Station</h1>
-    <p>Live Remote Monitoring via Adafruit IO</p>
+    <p>Live Remote Monitoring</p>
 
     <div class="container">
+        
+        <div class="card">
+            <div class="label">System Output</div>
+            <div class="value" id="relay-status">--</div>
+        </div>
+
         <div class="card">
             <div class="label">Battery Status</div>
             <div class="value batt-text">
                 <span id="batt-voltage">--</span><span class="unit">V</span>
             </div>
-            <div style="margin-top: 5px; font-size: 1.2em; color: #555;">
-                <span id="batt-percent">--</span>%
+            <div class="sub-value">
+                <span id="batt-percent">--</span>% Charged
             </div>
-        </div>
-
-        <div class="card">
-            <div class="label">Output Relay</div>
-            <div class="value" id="relay-status">--</div>
         </div>
 
         <div class="card">
             <div class="label">Solar Input</div>
             <div class="value">
-                <span id="solar-current">--</span><span class="unit">mA</span>
+                <span id="solar-voltage">--</span><span class="unit">V</span>
+            </div>
+            <div class="sub-value">
+                <span id="solar-current">--</span> mA
             </div>
         </div>
 
         <div class="card">
             <div class="label">Wind Input</div>
             <div class="value">
-                <span id="wind-current">--</span><span class="unit">mA</span>
+                <span id="wind-voltage">--</span><span class="unit">V</span>
+            </div>
+            <div class="sub-value">
+                <span id="wind-current">--</span> mA
             </div>
         </div>
 
         <div class="card">
-            <div class="label">Load Usage</div>
+            <div class="label">Load Output</div>
             <div class="value">
-                <span id="load-current">--</span><span class="unit">mA</span>
+                <span id="load-voltage">--</span><span class="unit">V</span>
+            </div>
+            <div class="sub-value">
+                <span id="load-current">--</span> mA
             </div>
         </div>
+
     </div>
 
     <div class="footer" id="last-update">Updating...</div>
 
     <script>
         // --- CONFIGURATION ---
-        const AIO_USERNAME = bthcreator; // <<< REPLACE THIS
-        const AIO_KEY = aio_TAqJ61wNerauvAeV8DT8UBBy2dA2;       // <<< REPLACE THIS
+        const AIO_USERNAME = "YOUR_ADAFRUIT_USERNAME"; // <<< REPLACE THIS
+        const AIO_KEY = "YOUR_ADAFRUIT_IO_KEY";       // <<< REPLACE THIS
         // ---------------------
 
-        async function fetchData(feedName, elementId) {
+        async function fetchData(feedName) {
             const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${feedName}/last`;
             try {
-                const response = await fetch(url, {
-                    headers: { "X-AIO-Key": AIO_KEY }
-                });
-                if (!response.ok) throw new Error("API Error");
+                const response = await fetch(url, { headers: { "X-AIO-Key": AIO_KEY } });
                 const data = await response.json();
-                
-                const element = document.getElementById(elementId);
-                
-                // Handle Relay Status (1/0 to ON/OFF)
-                if (feedName === 'relay-status') {
-                    if (data.value == '1') {
-                        element.innerText = "ON";
-                        element.className = "value status-on";
-                    } else {
-                        element.innerText = "OFF";
-                        element.className = "value status-off";
-                    }
-                } 
-                // Handle Voltage (Calculate Percentage too)
-                else if (feedName === 'battery-voltage') {
-                    let voltage = parseFloat(data.value);
-                    element.innerText = voltage.toFixed(1);
-                    
-                    // Calculate Percentage
-                    let percent = 0;
-                    if (voltage >= 12.7) percent = 100;
-                    else if (voltage <= 11.7) percent = 0;
-                    else percent = Math.round(((voltage - 11.7) / (12.7 - 11.7)) * 100);
-                    
-                    document.getElementById('batt-percent').innerText = percent;
-                } 
-                // Handle Current
-                else {
-                    element.innerText = parseFloat(data.value).toFixed(0);
-                }
-                
-                // Update timestamp
-                let now = new Date();
-                document.getElementById('last-update').innerText = "Last Updated: " + now.toLocaleTimeString();
+                return data.value;
+            } catch (error) { console.error(error); return null; }
+        }
 
-            } catch (error) {
-                console.error("Error fetching " + feedName, error);
+        async function updateDashboard() {
+            // Battery
+            let battV = await fetchData('battery-voltage');
+            if(battV) {
+                document.getElementById('batt-voltage').innerText = parseFloat(battV).toFixed(1);
+                let v = parseFloat(battV);
+                let p = 0;
+                if (v >= 12.7) p = 100; else if (v <= 11.7) p = 0; 
+                else p = Math.round(((v - 11.7) / (12.7 - 11.7)) * 100);
+                document.getElementById('batt-percent').innerText = p;
             }
+
+            // Relay
+            let relay = await fetchData('relay-status');
+            let relEl = document.getElementById('relay-status');
+            if(relay == '1') { relEl.innerText = "ON"; relEl.className = "value status-on"; }
+            else { relEl.innerText = "OFF"; relEl.className = "value status-off"; }
+
+            // Solar
+            let solV = await fetchData('solar-voltage');
+            let solA = await fetchData('solar-current');
+            if(solV) document.getElementById('solar-voltage').innerText = parseFloat(solV).toFixed(1);
+            if(solA) document.getElementById('solar-current').innerText = parseFloat(solA).toFixed(0);
+
+            // Wind
+            let wndV = await fetchData('wind-voltage');
+            let wndA = await fetchData('wind-current');
+            if(wndV) document.getElementById('wind-voltage').innerText = parseFloat(wndV).toFixed(1);
+            if(wndA) document.getElementById('wind-current').innerText = parseFloat(wndA).toFixed(0);
+
+            // Load
+            let ldV = await fetchData('load-voltage');
+            let ldA = await fetchData('load-current');
+            if(ldV) document.getElementById('load-voltage').innerText = parseFloat(ldV).toFixed(1);
+            if(ldA) document.getElementById('load-current').innerText = parseFloat(ldA).toFixed(0);
+
+            // Time
+            let now = new Date();
+            document.getElementById('last-update').innerText = "Last Updated: " + now.toLocaleTimeString();
         }
 
-        function updateDashboard() {
-            fetchData('battery-voltage', 'batt-voltage');
-            fetchData('solar-current', 'solar-current');
-            fetchData('load-current', 'load-current');
-            fetchData('wind-current', 'wind-current');
-            fetchData('relay-status', 'relay-status');
-        }
-
-        // Run immediately and then every 10 seconds
         window.onload = updateDashboard;
-        setInterval(updateDashboard, 10000);
+        setInterval(updateDashboard, 10000); // Update every 10 seconds
     </script>
 </body>
 </html>
