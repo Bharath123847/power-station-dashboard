@@ -119,61 +119,72 @@
         const AIO_KEY = "aio_MWwM156JfAcWjQeH4Dub5kdE0Kel";       // <<< REPLACE THIS
         // ---------------------
 
-        async function fetchData(feedName) {
+        async function fetchData(feedName, elementId) {
             const url = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds/${feedName}/last`;
             try {
                 const response = await fetch(url, { headers: { "X-AIO-Key": AIO_KEY } });
+                if (!response.ok) throw new Error("API Error");
                 const data = await response.json();
-                return data.value;
-            } catch (error) { console.error(error); return null; }
-        }
+                
+                const element = document.getElementById(elementId);
+                
+                // --- LOGIC TO HANDLE DIFFERENT FEEDS ---
 
-        async function updateDashboard() {
-            // Battery
-            let battV = await fetchData('battery-voltage');
-            if(battV) {
-                document.getElementById('batt-voltage').innerText = parseFloat(battV).toFixed(1);
-                let v = parseFloat(battV);
-                let p = 0;
-                if (v >= 12.7) p = 100; else if (v <= 11.7) p = 0; 
-                else p = Math.round(((v - 11.7) / (12.7 - 11.7)) * 100);
-                document.getElementById('batt-percent').innerText = p;
+                // 1. Relay Status (Convert 1/0 to ON/OFF)
+                if (feedName === 'relay-status') {
+                    if (data.value == '1') {
+                        element.innerText = "ON";
+                        element.className = "value status-on";
+                    } else {
+                        element.innerText = "OFF";
+                        element.className = "value status-off";
+                    }
+                } 
+                // 2. Battery Voltage (Calculate Percentage)
+                else if (feedName === 'battery-voltage') {
+                    let voltage = parseFloat(data.value);
+                    element.innerText = voltage.toFixed(1); // Show Voltage
+                    
+                    // Calculate Percentage Logic
+                    let percent = 0;
+                    if (voltage >= 12.7) percent = 100;
+                    else if (voltage <= 11.7) percent = 0;
+                    else percent = Math.round(((voltage - 11.7) / (12.7 - 11.7)) * 100);
+                    
+                    // Update the percentage text
+                    document.getElementById('batt-percent').innerText = percent;
+                } 
+                // 3. All Other Numbers (Currents/Voltages)
+                else {
+                    // If value is small (like voltage), show 1 decimal. If big (current), show 0.
+                    let val = parseFloat(data.value);
+                    if (val < 20) element.innerText = val.toFixed(1);
+                    else element.innerText = val.toFixed(0);
+                }
+                
+                // Update timestamp
+                let now = new Date();
+                document.getElementById('last-update').innerText = "Last Updated: " + now.toLocaleTimeString();
+
+            } catch (error) {
+                console.error("Error fetching " + feedName, error);
             }
-
-            // Relay
-            let relay = await fetchData('relay-status');
-            let relEl = document.getElementById('relay-status');
-            if(relay == '1') { relEl.innerText = "ON"; relEl.className = "value status-on"; }
-            else { relEl.innerText = "OFF"; relEl.className = "value status-off"; }
-
-            // Solar
-            let solV = await fetchData('solar-voltage');
-            let solA = await fetchData('solar-current');
-            if(solV) document.getElementById('solar-voltage').innerText = parseFloat(solV).toFixed(1);
-            if(solA) document.getElementById('solar-current').innerText = parseFloat(solA).toFixed(0);
-
-            // Wind
-            let wndV = await fetchData('wind-voltage');
-            let wndA = await fetchData('wind-current');
-            if(wndV) document.getElementById('wind-voltage').innerText = parseFloat(wndV).toFixed(1);
-            if(wndA) document.getElementById('wind-current').innerText = parseFloat(wndA).toFixed(0);
-
-            // Load
-            let ldV = await fetchData('load-voltage');
-            let ldA = await fetchData('load-current');
-            if(ldV) document.getElementById('load-voltage').innerText = parseFloat(ldV).toFixed(1);
-            if(ldA) document.getElementById('load-current').innerText = parseFloat(ldA).toFixed(0);
-
-            // Time
-            let now = new Date();
-            document.getElementById('last-update').innerText = "Last Updated: " + now.toLocaleTimeString();
         }
 
+        function updateDashboard() {
+            fetchData('battery-voltage', 'batt-voltage');
+            fetchData('solar-voltage', 'solar-voltage');
+            fetchData('solar-current', 'solar-current');
+            fetchData('wind-voltage', 'wind-voltage');
+            fetchData('wind-current', 'wind-current');
+            fetchData('load-voltage', 'load-voltage');
+            fetchData('load-current', 'load-current');
+            fetchData('relay-status', 'relay-status');
+        }
+
+        // Run immediately and then every 10 seconds
         window.onload = updateDashboard;
-        setInterval(updateDashboard, 10000); // Update every 10 seconds
+        setInterval(updateDashboard, 10000);
     </script>
 </body>
 </html>
-
-
-
